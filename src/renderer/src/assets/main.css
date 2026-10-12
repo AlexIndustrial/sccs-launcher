@@ -1,0 +1,474 @@
+@import './base.css';
+
+@font-face {
+  font-family: 'Continuum';
+  src:
+    url('./sc/fonts/continuummedium_2.woff') format('woff'),
+    url('./sc/fonts/continuummedium_2.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --sc-abyss: #06080b;
+  --sc-panel: #0f151c;
+  --sc-panel2: #151d26;
+  --sc-ink: #e9eef3;
+  --sc-mist: #aab5c0;
+  --sc-dim: #75838f;
+  --sc-accent: #00bfa5;
+  --sc-accent-hi: #2de0c6;
+  --sc-steam: #c62828;
+  --sc-steam-hi: #e53935;
+  --sc-online: #2de08a;
+  --sc-display: 'Continuum', 'Segoe UI', Roboto, Arial, sans-serif;
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--sc-abyss);
+  color: var(--sc-ink);
+}
+
+body {
+  display: block;
+  overflow-y: auto;
+  overflow-x: hidden;
+  user-select: none;
+}
+
+#root {
+  display: block;
+  margin: 0;
+  min-height: 100vh;
+}
+
+/* ---- hero ---- */
+.sc-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 26px 24px 20px;
+  text-align: center;
+  isolation: isolate;
+}
+
+.sc-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-image: url('./sc/bg.webp');
+  background-size: cover;
+  background-position: center;
+  animation: sc-hero-zoom 30s ease-in-out infinite alternate;
+}
+
+.sc-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    180deg,
+    rgba(6, 8, 11, 0.55) 0%,
+    rgba(6, 8, 11, 0.25) 35%,
+    rgba(6, 8, 11, 0.7) 75%,
+    #06080b 100%
+  );
+}
+
+@keyframes sc-hero-zoom {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.06);
+  }
+}
+
+.sc-logo {
+  width: clamp(200px, 36vw, 320px);
+  height: auto;
+  filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.65));
+  -webkit-user-drag: none;
+}
+
+.sc-hero-top {
+  display: flex;
+  justify-content: flex-end;
+  max-width: 640px;
+  margin: 0 auto 8px;
+}
+
+/* переключатель RU | EN, как на сайте */
+.sc-lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 10px;
+  background: rgba(21, 29, 38, 0.94);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.sc-lang-btn {
+  padding: 4px 10px;
+  font-family: var(--sc-display);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--sc-dim);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: color 150ms;
+}
+
+.sc-lang-btn:hover {
+  color: #fff;
+}
+
+.sc-lang-btn.is-active {
+  color: #fff;
+  background: var(--sc-panel3, #1b2531);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.sc-lang-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.sc-kicker {
+  margin-top: 10px;
+  font-family: var(--sc-display);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  color: var(--sc-accent-hi);
+}
+
+.sc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: #c9f5dd;
+  background: rgba(8, 20, 14, 0.6);
+  border: 1px solid rgba(45, 224, 138, 0.3);
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  max-width: 100%;
+  overflow: hidden;
+  vertical-align: top;
+}
+
+/* одна строка всегда: без переносов высота пилюли стабильна */
+.sc-pill .dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sc-online);
+}
+
+.sc-pill-txt {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.sc-pill.is-busy .dot {
+  background: var(--sc-accent);
+  animation: sc-blink 1s ease-in-out infinite;
+}
+
+@keyframes sc-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ---- layout ---- */
+.sc-body {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 4px 20px 40px;
+  display: grid;
+  gap: 12px;
+}
+
+/* grid-элементы по умолчанию min-width:auto и не ужимаются уже nowrap-контента —
+   без этого длинные строки распирают всю колонку */
+.sc-body > * {
+  min-width: 0;
+}
+
+.sc-card {
+  background: var(--sc-panel);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 20px;
+}
+
+.sc-card h2 {
+  font-family: var(--sc-display);
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--sc-accent);
+  margin-bottom: 14px;
+}
+
+/* ---- buttons (как на сайте) ---- */
+.sc-btn {
+  font-family: var(--sc-display);
+  text-transform: uppercase;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    filter 150ms,
+    transform 50ms;
+}
+
+.sc-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.sc-btn:not(:disabled):hover {
+  filter: brightness(1.1);
+}
+
+.sc-btn:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.sc-btn-play {
+  width: 100%;
+  min-height: 56px;
+  font-size: 19px;
+  color: #fff;
+  background: linear-gradient(to bottom, var(--sc-steam-hi), var(--sc-steam));
+  box-shadow:
+    0 8px 24px -10px rgba(229, 57, 53, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.sc-btn-row {
+  display: flex;
+  gap: 10px;
+}
+
+.sc-btn-ghost {
+  flex: 1;
+  min-height: 46px;
+  font-size: 15px;
+  color: var(--sc-accent-hi);
+  background: rgba(0, 191, 165, 0.1);
+  border: 1px solid rgba(0, 191, 165, 0.45);
+}
+
+.sc-btn-ghost:not(:disabled):hover {
+  background: rgba(0, 191, 165, 0.18);
+}
+
+.sc-btn-small {
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 13px;
+  white-space: nowrap;
+  color: var(--sc-accent-hi);
+  background: rgba(0, 191, 165, 0.1);
+  border: 1px solid rgba(0, 191, 165, 0.45);
+}
+
+/* ---- progress ---- */
+.sc-progress-wrap {
+  margin-top: 14px;
+}
+
+.sc-progress-track {
+  height: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.sc-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--sc-accent), var(--sc-accent-hi));
+  box-shadow: 0 0 12px rgba(45, 224, 198, 0.5);
+  transition: width 150ms linear;
+}
+
+.sc-progress-label {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--sc-mist);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ---- settings ---- */
+.sc-field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--sc-dim);
+}
+
+.sc-field:last-child {
+  margin-bottom: 0;
+}
+
+.sc-input {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 14px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--sc-ink);
+  background: #060c1a;
+  border: 1px solid rgba(0, 191, 165, 0.25);
+  border-radius: 10px;
+  outline: none;
+}
+
+.sc-input:focus {
+  border-color: var(--sc-accent);
+  box-shadow: 0 0 0 3px rgba(0, 191, 165, 0.15);
+}
+
+select.sc-input {
+  cursor: pointer;
+}
+
+select.sc-input option {
+  background: var(--sc-panel);
+  color: var(--sc-ink);
+}
+
+.sc-dir-row {
+  display: flex;
+  gap: 8px;
+}
+
+.sc-dir-row .sc-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.sc-warn {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: normal;
+  text-transform: none;
+  color: #f2c879;
+  background: rgba(242, 169, 59, 0.08);
+  border: 1px solid rgba(242, 169, 59, 0.3);
+  border-radius: 10px;
+}
+
+/* ползунок потоков */
+input[type='range'].sc-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  outline: none;
+  cursor: pointer;
+}
+
+input[type='range'].sc-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--sc-accent-hi);
+  border: 2px solid #06080b;
+  box-shadow:
+    0 0 0 1px rgba(45, 224, 198, 0.6),
+    0 0 12px rgba(45, 224, 198, 0.5);
+}
+
+input[type='range'].sc-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--sc-accent-hi);
+  border: 2px solid #06080b;
+  box-shadow:
+    0 0 0 1px rgba(45, 224, 198, 0.6),
+    0 0 12px rgba(45, 224, 198, 0.5);
+}
+
+.sc-range-value {
+  color: var(--sc-accent-hi);
+}
+
+/* ---- log ---- */
+.sc-log {
+  margin: 0;
+  padding: 12px;
+  height: 150px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-size: 12px;
+  line-height: 1.5;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: #c9d4dd;
+  background: #04070a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  user-select: text;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* подпись внизу */
+.sc-sign {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 6px 0 2px;
+  font-size: 13px;
+  color: var(--sc-dim);
+}
+
+.sc-sign .sc-heart {
+  color: var(--sc-steam-hi);
+}
+
+.sc-sign a {
+  display: inline-flex;
+  color: var(--sc-mist);
+  transition: color 150ms;
+}
+
+.sc-sign a:hover {
+  color: #fff;
+}
