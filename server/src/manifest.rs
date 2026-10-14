@@ -20,6 +20,18 @@ pub struct Manifest {
     pub files: Vec<FileEntry>,
 }
 
+/// Папки верхнего уровня, которые не раздаём игрокам
+/// (серверная часть: шарды, матчмейкер и т.п.). Легко расширить.
+pub const EXCLUDED_TOP_LEVELS: &[&str] = &["cloud"];
+
+/// true, если путь лежит в исключённой папке.
+pub fn is_excluded(rel_unix: &str) -> bool {
+    rel_unix
+        .split('/')
+        .next()
+        .is_some_and(|top| EXCLUDED_TOP_LEVELS.contains(&top))
+}
+
 fn now_rfc3339() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let secs = SystemTime::now()
@@ -64,6 +76,10 @@ pub fn generate_manifest(
         }
         // Служебные/скрытые файлы (`.gitkeep`, `.DS_Store`, ...) не раздаём.
         if rel_str.split('/').any(|seg| seg.starts_with('.')) {
+            continue;
+        }
+        // Исключённые папки верхнего уровня (cloud и т.п.).
+        if is_excluded(&rel_str) {
             continue;
         }
         if rel_str.ends_with(".tmp") || rel_str.ends_with(".part") {
