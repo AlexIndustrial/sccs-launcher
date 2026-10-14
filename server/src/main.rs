@@ -74,13 +74,7 @@ fn cmd_generate(
     if !game_dir.exists() {
         return Err(format!("game-dir не существует: {}", game_dir.display()));
     }
-    let version = version.unwrap_or_else(|| {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs().to_string())
-            .unwrap_or_else(|_| "0".into())
-    });
+    let version = version.unwrap_or_else(|| "v3".into());
 
     let m = manifest::generate_manifest(&game_dir, version)?;
     let out = output.unwrap_or_else(|| game_dir.join("manifest.json"));
