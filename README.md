@@ -113,7 +113,14 @@ ln -s "/path/to/star conflict" game   # либо укажи свой --game-dir
 
 ### 4. systemd (пример)
 
+Сервис запускаем **отдельным пользователем без root-прав** — под root его
+запускать не надо (порт 8081 > 1024, поэтому привилегии не нужны):
+
 ```bash
+# Пользователь и права на папку раздачи:
+useradd -r -s /usr/sbin/nologin -d /opt/sccs-cdn sccs
+chown -R sccs:sccs /opt/sccs-cdn
+
 cat > /etc/systemd/system/sccs-cdn.service <<'EOF'
 [Unit]
 Description=SCCS Star Conflict patch server
@@ -122,7 +129,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=root
+User=sccs
+Group=sccs
 WorkingDirectory=/opt/sccs-cdn
 ExecStart=/opt/sccs-cdn/target/release/sccs-server serve --game-dir /opt/sccs-cdn/game --host 127.0.0.1 --port 8081
 Restart=always
@@ -137,6 +145,12 @@ systemctl daemon-reload
 systemctl enable --now sccs-cdn
 curl http://127.0.0.1:8081/health
 ```
+
+> Если знаешь, что делаешь: сам `serve` для раздачи не обязателен. Протокол —
+> обычная статика (`GET /manifest.json` + `GET /files/<path>` с `Range`, который
+> nginx/caddy умеют из коробки), так что раздавать файлы может напрямую
+> nginx/caddy или любой другой веб-сервер. От sccs-server тогда нужен только
+> `generate` для сборки манифеста.
 
 ### 5. Reverse proxy (рекомендуется)
 

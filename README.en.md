@@ -115,7 +115,14 @@ Endpoints:
 
 ### 4. systemd (example)
 
+Run the service as a **dedicated unprivileged user, not root** — root is not
+needed (port 8081 > 1024, so no privileges required):
+
 ```bash
+# User and ownership of the distribution folder:
+useradd -r -s /usr/sbin/nologin -d /opt/sccs-cdn sccs
+chown -R sccs:sccs /opt/sccs-cdn
+
 cat > /etc/systemd/system/sccs-cdn.service <<'EOF'
 [Unit]
 Description=SCCS Star Conflict patch server
@@ -124,7 +131,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=root
+User=sccs
+Group=sccs
 WorkingDirectory=/opt/sccs-cdn
 ExecStart=/opt/sccs-cdn/target/release/sccs-server serve --game-dir /opt/sccs-cdn/game --host 127.0.0.1 --port 8081
 Restart=always
@@ -139,6 +147,12 @@ systemctl daemon-reload
 systemctl enable --now sccs-cdn
 curl http://127.0.0.1:8081/health
 ```
+
+> If you know what you're doing: `serve` itself isn't required for distribution.
+> The protocol is plain static files (`GET /manifest.json` + `GET /files/<path>`
+> with `Range`, which nginx/caddy handle out of the box), so nginx/caddy or any
+> other web server can serve the files directly. Then you only need sccs-server's
+> `generate` to build the manifest.
 
 ### 5. Reverse proxy (recommended)
 
