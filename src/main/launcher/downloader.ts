@@ -31,7 +31,8 @@ async function downloadOne(
   serverUrl: string,
   installDir: string,
   file: ManifestFile,
-  onChunk: (chunkBytes: number) => void
+  onChunk: (chunkBytes: number) => void,
+  onMtimeFail: (path: string, err: unknown) => void
 ): Promise<void> {
   const url = `${serverUrl}/files/${encodeRelPath(file.path)}`
   const res = await fetch(url)
@@ -74,7 +75,13 @@ async function downloadOne(
   // Pin mtime from the manifest so the next check takes
   // the fast path (size + mtime) without hashing.
   if (file.mtime != null) {
-    await fs.utimes(dest, file.mtime, file.mtime).catch(() => {})
+    try {
+      await fs.utimes(dest, file.mtime, file.mtime)
+    } catch (e) {
+      // Surfaced through the caller's warning channel: a failed utimes means
+      // the next check falls back to hashing this file.
+      onMtimeFail(file.path, e)
+    }
   }
 }
 
@@ -83,6 +90,8 @@ export interface DownloadOptions {
   concurrency?: number
   /** Minimum interval between progress events, ms. Default 100. */
   progressThrottleMs?: number
+  /** Called when pinning mtime fails (file will be re-hashed next check). */
+  onMtimeFail?: (path: string, err: unknown) => void
 }
 
 export async function downloadFiles(
@@ -130,11 +139,17 @@ export async function downloadFiles(
       if (i >= files.length) return
       const f = files[i]
       try {
-        await downloadOne(serverUrl, installDir, f, (chunkBytes) => {
-          fileDone[i] += chunkBytes
-          doneBytes += chunkBytes
-          emit(i)
-        })
+        await downloadOne(
+          serverUrl,
+          installDir,
+          f,
+          (chunkBytes) => {
+            fileDone[i] += chunkBytes
+            doneBytes += chunkBytes
+            emit(i)
+          },
+          (badPath, err) => options.onMtimeFail?.(badPath, err)
+        )
       } catch (e) {
         failed = true
         throw e

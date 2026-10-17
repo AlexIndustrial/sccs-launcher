@@ -1,15 +1,9 @@
-import { dialog, ipcMain, screen, type BrowserWindow } from 'electron'
+import { app, dialog, ipcMain, screen, type BrowserWindow } from 'electron'
 import { loadConfig, saveConfig } from './config'
 import { checkForUpdates, fetchManifest } from './manifest'
 import { downloadFiles, type ProgressEvent } from './downloader'
 import { playGame } from './game'
-import {
-  checkForAppUpdate,
-  downloadAppUpdate,
-  quitAndInstall,
-  setupAutoUpdater,
-  type UpdateState
-} from './updater'
+import { checkForAppUpdate, setupAutoUpdater } from './updater'
 
 function senderWindow(win: BrowserWindow | null): BrowserWindow | null {
   return win
@@ -49,7 +43,14 @@ export function registerLauncherIpc(getWindow: () => BrowserWindow | null): void
     if (checked.upToDate) return { updated: 0, version: manifest.version }
 
     await downloadFiles(cfg.serverUrl, cfg.installDir, checked.toUpdate, onProgress, {
-      concurrency: cfg.concurrency
+      concurrency: cfg.concurrency,
+      onMtimeFail: (path, err) => {
+        win?.webContents.send('launcher:warning', {
+          scope: 'mtime',
+          path,
+          message: String(err)
+        })
+      }
     })
 
     // final re-check
@@ -86,20 +87,12 @@ export function registerLauncherIpc(getWindow: () => BrowserWindow | null): void
     return checkForAppUpdate()
   })
 
-  ipcMain.handle('launcher:update-download', async () => {
-    return downloadAppUpdate()
-  })
-
-  ipcMain.handle('launcher:update-install', async () => {
-    quitAndInstall()
-  })
-
-  // Background check: forward updater events to the renderer.
-  setupAutoUpdater((state: UpdateState, payload?: unknown) => {
-    const win = senderWindow(getWindow())
-    if (!win) return
-    win.webContents.send('launcher:app-update', { state, payload })
-  })
+  // App updates are checked in the background and offered via a native dialog;
+  // only the download progress is mirrored to the renderer for the status pill.
+  setupAutoUpdater(
+    () => senderWindow(getWindow()),
+    () => (app.getLocale().toLowerCase().startsWith('ru') ? 'ru' : 'en')
+  )
 
   // Fit window height to content (renderer sends scrollHeight).
   // Width is fixed, height is clamped to the screen work area.

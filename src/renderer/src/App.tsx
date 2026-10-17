@@ -23,6 +23,8 @@ import {
   logServerRemoved,
   logNeed,
   logUpdated,
+  logCheckStats,
+  logMtimeFail,
   type Lang
 } from './i18n'
 
@@ -38,10 +40,11 @@ interface Progress {
   fileCount: number
 }
 
-interface AppUpdateInfo {
-  version: string
-  releaseDate: string
-  releaseNotes: string | null
+interface CheckStats {
+  fastMatched: number
+  hashed: number
+  hashedBytes: number
+  repaired: number
 }
 
 interface AppUpdateProgress {
@@ -51,8 +54,8 @@ interface AppUpdateProgress {
   bytesPerSecond: number
 }
 
-type AppUpdateState =
-  'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'ready' | 'error'
+/** Game state drives the primary button: Update replaces Play until up to date. */
+type GameState = 'idle' | 'checking' | 'needs-update' | 'ready'
 
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`
@@ -103,10 +106,7 @@ function GithubIcon(): React.JSX.Element {
 
 function App(): React.JSX.Element {
   const [lang] = useState<Lang>(() => loadLang())
-  const [appUpdate, setAppUpdate] = useState<AppUpdateState>('idle')
-  const [appUpdateInfo, setAppUpdateInfo] = useState<AppUpdateInfo | null>(null)
   const [appUpdateProgress, setAppUpdateProgress] = useState<AppUpdateProgress | null>(null)
-  const [appUpdateError, setAppUpdateError] = useState<string | null>(null)
   const [serverUrl, setServerUrl] = useState(window.api.defaultServer)
   const [servers, setServers] = useState<string[]>([])
   const [newServer, setNewServer] = useState('')
@@ -117,7 +117,8 @@ function App(): React.JSX.Element {
   const [log, setLog] = useState<string[]>([])
   const [progress, setProgress] = useState<Progress | null>(null)
   const [busy, setBusy] = useState(false)
-  const [canPlay, setCanPlay] = useState(false)
+  const [gameState, setGameState] = useState<GameState>('idle')
+  const [checkStats, setCheckStats] = useState<CheckStats | null>(null)
 
   const S = strs(lang)
 
@@ -152,32 +153,14 @@ function App(): React.JSX.Element {
       .catch((e) => setStatus(stConfigError(loadLang(), e)))
 
     const off = window.api.onProgress((p) => setProgress(p))
-    const offUpd = window.api.onAppUpdate((state, payload) => {
-      setAppUpdate(state)
-      switch (state) {
-        case 'available':
-          setAppUpdateInfo(payload as AppUpdateInfo)
-          setAppUpdateError(null)
-          break
-        case 'not-available':
-          setAppUpdateInfo(null)
-          break
-        case 'downloading':
-          setAppUpdateProgress(payload as AppUpdateProgress)
-          break
-        case 'ready':
-          setAppUpdateProgress(null)
-          break
-        case 'error':
-          setAppUpdateError(String(payload ?? ''))
-          break
-        default:
-          break
-      }
+    const offUpd = window.api.onAppUpdateProgress((p) => setAppUpdateProgress(p))
+    const offWarn = window.api.onWarning((w) => {
+      pushLog(logMtimeFail(loadLang(), w.path, w.message))
     })
     return () => {
       off()
       offUpd()
+      offWarn()
     }
   }, [])
 
@@ -263,32 +246,41 @@ function App(): React.JSX.Element {
     })
   }
 
-  const handleCheck = (full: boolean) => async (): Promise<void> => {
+  const runCheck = async (full: boolean, auto = false): Promise<void> => {
+    if (busy) return
     setBusy(true)
     setProgress(null)
+    setGameState('checking')
+    if (!auto) setStatus(stChecking(lang, full))
     try {
-      await saveSettings()
-      setStatus(stChecking(lang, full))
+      if (!auto) await saveSettings()
       const r = await window.api.check(full)
+      setCheckStats({
+        fastMatched: r.fastMatched,
+        hashed: r.hashed,
+        hashedBytes: r.hashedBytes,
+        repaired: r.repaired
+      })
+      pushLog(logCheckStats(lang, r.fastMatched, r.hashed, fmtBytes(r.hashedBytes)))
       if (r.upToDate) {
         setStatus(stUpToDate(lang, r.version, r.totalFiles))
-        pushLog(`check: up-to-date v${r.version}`)
-        setCanPlay(true)
+        pushLog(`check: up-to-date ${r.version.startsWith('v') ? r.version : `v${r.version}`}`)
+        setGameState('ready')
       } else {
         setStatus(stNeed(lang, r.toUpdate.length, fmtBytes(r.toUpdateBytes), r.totalFiles))
         pushLog(logNeed(lang, r.toUpdate.length, fmtBytes(r.toUpdateBytes)))
-        setCanPlay(false)
+        setGameState('needs-update')
       }
     } catch (e) {
       setStatus(stCheckError(lang, e))
       pushLog(`check error: ${String(e)}`)
+      setGameState('idle')
     } finally {
       setBusy(false)
     }
   }
 
   const handleUpdate = async (): Promise<void> => {
-    setBusy(true)
     setProgress(null)
     try {
       await saveSettings()
@@ -296,7 +288,8 @@ function App(): React.JSX.Element {
       const r = await window.api.update()
       setStatus(stUpdated(lang, r.updated, r.version))
       pushLog(logUpdated(lang, r.updated, r.version))
-      setCanPlay(true)
+      setGameState('ready')
+      setProgress(null)
     } catch (e) {
       setStatus(stUpdateError(lang, e))
       pushLog(`update error: ${String(e)}`)
@@ -304,6 +297,15 @@ function App(): React.JSX.Element {
       setBusy(false)
     }
   }
+
+  // Check for game updates as soon as the app starts.
+  useEffect(() => {
+    const boot = setTimeout(() => {
+      void runCheck(false, true)
+    }, 500)
+    return () => clearTimeout(boot)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handlePlay = async (): Promise<void> => {
     try {
@@ -328,51 +330,16 @@ function App(): React.JSX.Element {
     }
   }
 
-  const handleAppUpdateCheck = async (): Promise<void> => {
-    setAppUpdateError(null)
-    setAppUpdate('checking')
-    try {
-      const r = await window.api.checkAppUpdate()
-      if (r.available && r.info) {
-        setAppUpdateInfo(r.info)
-        setAppUpdate('available')
-        pushLog(`app update available: v${r.info.version}`)
-      } else {
-        setAppUpdate('not-available')
-        pushLog('app update: up-to-date')
-      }
-    } catch (e) {
-      const msg = String(e)
-      setAppUpdate('error')
-      setAppUpdateError(msg)
-      pushLog(`app update check failed: ${msg}`)
-    }
-  }
-
-  const handleAppUpdateDownload = async (): Promise<void> => {
-    setAppUpdateError(null)
-    try {
-      await window.api.downloadAppUpdate()
-      setAppUpdate('ready')
-      pushLog('app update downloaded')
-    } catch (e) {
-      const msg = String(e)
-      setAppUpdate('error')
-      setAppUpdateError(msg)
-      pushLog(`app update download failed: ${msg}`)
-    }
-  }
-
-  const handleAppUpdateInstall = async (): Promise<void> => {
-    await window.api.installAppUpdate()
-  }
-
   const pct = progress ? Math.round(progress.overallRatio * 100) : 0
   const phaseLabel = progress?.phase === 'check' ? S.checking : S.downloading
   const progressText = progress
     ? `${phaseLabel} ${pct}% — ${progress.fileIndex}/${progress.fileCount} ${progress.filePath} (${fmtBytes(progress.doneBytes)}/${fmtBytes(progress.totalBytes)})`
     : ''
   const isDefaultServer = serverUrl === window.api.defaultServer
+  // App update download runs behind a native dialog; surface its progress in the pill.
+  const statusText = appUpdateProgress
+    ? `${S.appUpdateDownloading} ${Math.round(appUpdateProgress.percent)}%`
+    : status
 
   return (
     <div>
@@ -383,9 +350,9 @@ function App(): React.JSX.Element {
         <img src={logoUrl} alt="Star Conflict" className="sc-logo" />
         <p className="sc-kicker">Community Server • Launcher</p>
         <div>
-          <span className={`sc-pill${busy ? ' is-busy' : ''}`} title={status}>
+          <span className={`sc-pill${busy ? ' is-busy' : ''}`} title={statusText}>
             <span className="dot" />
-            <span className="sc-pill-txt">{status}</span>
+            <span className="sc-pill-txt">{statusText}</span>
           </span>
         </div>
       </header>
@@ -393,25 +360,27 @@ function App(): React.JSX.Element {
       <div className="sc-body">
         <section className="sc-card">
           <div style={{ display: 'grid', gap: 10 }}>
-            <button className="sc-btn sc-btn-play" disabled={!canPlay || busy} onClick={handlePlay}>
-              {S.play}
-            </button>
-            <div className="sc-btn-row">
-              <button className="sc-btn sc-btn-ghost" disabled={busy} onClick={handleCheck(false)}>
-                {S.check}
-              </button>
-              <button
-                className="sc-btn sc-btn-ghost"
-                disabled={busy}
-                onClick={handleCheck(true)}
-                title={S.fullCheckHint}
-              >
-                {S.fullCheck}
-              </button>
-              <button className="sc-btn sc-btn-ghost" disabled={busy} onClick={handleUpdate}>
+            {gameState === 'needs-update' ? (
+              <button className="sc-btn sc-btn-play" disabled={busy} onClick={handleUpdate}>
                 {S.update}
               </button>
-            </div>
+            ) : (
+              <button
+                className="sc-btn sc-btn-play"
+                disabled={gameState !== 'ready' || busy}
+                onClick={handlePlay}
+              >
+                {S.play}
+              </button>
+            )}
+            <button
+              className="sc-btn sc-btn-ghost"
+              disabled={busy}
+              onClick={() => void runCheck(true)}
+              title={S.fullCheckHint}
+            >
+              {S.fullCheck}
+            </button>
           </div>
 
           {/* No reserved space: when progress appears the window grows (see effect below) */}
@@ -427,68 +396,13 @@ function App(): React.JSX.Element {
           )}
         </section>
 
-        <section className="sc-card">
-          <h2>{S.appUpdate}</h2>
-
-          {appUpdate === 'available' && appUpdateInfo && (
-            <div className="sc-update-box">
-              <p className="sc-update-title">
-                {S.appUpdateAvailable}: <b>v{appUpdateInfo.version}</b>
-              </p>
-              <div className="sc-btn-row">
-                <button className="sc-btn sc-btn-ghost" onClick={handleAppUpdateDownload}>
-                  {S.appUpdateDownloading}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {appUpdate === 'downloading' && (
-            <div className="sc-update-box">
-              <div className="sc-progress-track">
-                <div
-                  className="sc-progress-fill"
-                  style={{ width: `${Math.round(appUpdateProgress?.percent ?? 0)}%` }}
-                />
-              </div>
-              <div className="sc-progress-label">
-                {S.appUpdateDownloading} {Math.round(appUpdateProgress?.percent ?? 0)}%
-              </div>
-            </div>
-          )}
-
-          {appUpdate === 'ready' && (
-            <div className="sc-update-box">
-              <p className="sc-update-title">{S.appUpdateReady}</p>
-              <button className="sc-btn sc-btn-play" onClick={handleAppUpdateInstall}>
-                {S.appUpdateInstall}
-              </button>
-            </div>
-          )}
-
-          {appUpdate === 'error' && (
-            <div className="sc-update-box">
-              <p className="sc-update-title">{S.appUpdateFailed}</p>
-              {appUpdateError && <p className="sc-progress-label">{appUpdateError}</p>}
-            </div>
-          )}
-
-          {appUpdate === 'not-available' && (
-            <p className="sc-progress-label">{S.appUpdateUpToDate}</p>
-          )}
-
-          {appUpdate !== 'ready' && (
-            <div className="sc-btn-row" style={{ marginTop: 8 }}>
-              <button
-                className="sc-btn sc-btn-ghost"
-                disabled={appUpdate === 'checking' || appUpdate === 'downloading'}
-                onClick={handleAppUpdateCheck}
-              >
-                {appUpdate === 'checking' ? S.appUpdateChecking : S.appUpdateCheck}
-              </button>
-            </div>
-          )}
-        </section>
+        {checkStats && (
+          <div className="sc-progress-label" style={{ marginTop: 10 }}>
+            {S.checkFast}: {checkStats.fastMatched} · {S.checkHashed}: {checkStats.hashed} (
+            {fmtBytes(checkStats.hashedBytes)})
+            {checkStats.repaired > 0 && ` · ${S.checkRepaired}: ${checkStats.repaired}`}
+          </div>
+        )}
 
         <section className="sc-card">
           <h2>{S.settings}</h2>

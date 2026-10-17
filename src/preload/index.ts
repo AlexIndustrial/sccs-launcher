@@ -27,6 +27,10 @@ export interface CheckResult {
   toUpdate: ManifestFile[]
   toUpdateBytes: number
   upToDate: boolean
+  fastMatched: number
+  hashed: number
+  hashedBytes: number
+  repaired: number
 }
 
 export interface ProgressEvent {
@@ -54,9 +58,6 @@ export interface AppUpdateProgress {
   bytesPerSecond: number
 }
 
-export type AppUpdateState =
-  'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'ready' | 'error'
-
 const api = {
   defaultServer: DEFAULT_SERVER,
   getConfig: (): Promise<LauncherConfig> => ipcRenderer.invoke('launcher:get-config'),
@@ -69,16 +70,17 @@ const api = {
   pickDir: (): Promise<string | null> => ipcRenderer.invoke('launcher:pick-dir'),
   fitWindow: (height: number): Promise<void> => ipcRenderer.invoke('launcher:fit-window', height),
 
-  checkAppUpdate: (): Promise<{ available: boolean; info?: AppUpdateInfo }> =>
-    ipcRenderer.invoke('launcher:update-check'),
-  downloadAppUpdate: (): Promise<AppUpdateInfo | null> =>
-    ipcRenderer.invoke('launcher:update-download'),
-  installAppUpdate: (): Promise<void> => ipcRenderer.invoke('launcher:update-install'),
-  onAppUpdate: (cb: (state: AppUpdateState, payload: unknown) => void): (() => void) => {
-    const listener = (_e: unknown, msg: { state: AppUpdateState; payload?: unknown }): void =>
-      cb(msg.state, msg.payload)
-    ipcRenderer.on('launcher:app-update', listener as never)
-    return () => ipcRenderer.removeListener('launcher:app-update', listener as never)
+  onAppUpdateProgress: (cb: (p: AppUpdateProgress) => void): (() => void) => {
+    const listener = (_e: unknown, p: AppUpdateProgress): void => cb(p)
+    ipcRenderer.on('launcher:app-update-progress', listener as never)
+    return () => ipcRenderer.removeListener('launcher:app-update-progress', listener as never)
+  },
+
+  onWarning: (cb: (w: { scope: string; path: string; message: string }) => void): (() => void) => {
+    const listener = (_e: unknown, w: { scope: string; path: string; message: string }): void =>
+      cb(w)
+    ipcRenderer.on('launcher:warning', listener as never)
+    return () => ipcRenderer.removeListener('launcher:warning', listener as never)
   },
 
   onProgress: (cb: (p: ProgressEvent) => void): (() => void) => {

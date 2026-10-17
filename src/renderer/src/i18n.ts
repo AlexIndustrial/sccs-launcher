@@ -51,6 +51,9 @@ interface Strings {
   appUpdateFailed: string
   appUpdateInstall: string
   appUpdateDevNote: string
+  checkFast: string
+  checkHashed: string
+  checkRepaired: string
 }
 
 const ru: Strings = {
@@ -87,7 +90,10 @@ const ru: Strings = {
   appUpdateReady: 'Обновление готово к установке',
   appUpdateFailed: 'Ошибка обновления',
   appUpdateInstall: 'Установить и перезапустить',
-  appUpdateDevNote: 'В dev-режиме автообновление недоступно'
+  appUpdateDevNote: 'В dev-режиме автообновление недоступно',
+  checkFast: 'быстрым путём',
+  checkHashed: 'по хешу',
+  checkRepaired: 'восстановлено mtime'
 }
 
 const en: Strings = {
@@ -124,7 +130,10 @@ const en: Strings = {
   appUpdateReady: 'Update ready to install',
   appUpdateFailed: 'Update error',
   appUpdateInstall: 'Install and restart',
-  appUpdateDevNote: 'Auto-update is unavailable in dev mode'
+  appUpdateDevNote: 'Auto-update is unavailable in dev mode',
+  checkFast: 'fast path',
+  checkHashed: 'hashed',
+  checkRepaired: 'mtime repaired'
 }
 
 export function strs(lang: Lang): Strings {
@@ -150,10 +159,15 @@ export const stChecking = (l: Lang, full: boolean): string =>
       ? 'Checking for updates…'
       : 'Проверка обновлений…'
 
+/** Server versions already look like "v3"; don't double the prefix. */
+function vtag(version: string): string {
+  return version.startsWith('v') ? version : `v${version}`
+}
+
 export const stUpToDate = (l: Lang, version: string, total: number): string =>
   l === 'en'
-    ? `Up to date (v${version}, files: ${total})`
-    : `Актуально (v${version}, файлов: ${total})`
+    ? `Up to date (${vtag(version)}, files: ${total})`
+    : `Актуально (${vtag(version)}, файлов: ${total})`
 
 export const stNeed = (l: Lang, count: number, bytes: string, total: number): string =>
   l === 'en'
@@ -167,8 +181,8 @@ export const stDownloading = (l: Lang): string => (l === 'en' ? 'Downloading…'
 
 export const stUpdated = (l: Lang, updated: number, version: string): string =>
   l === 'en'
-    ? `Updated ${updated} files (v${version}). Ready to play.`
-    : `Обновлено файлов: ${updated} (v${version}). Можно играть.`
+    ? `Updated ${updated} files (${vtag(version)}). Ready to play.`
+    : `Обновлено файлов: ${updated} (${vtag(version)}). Можно играть.`
 
 export const stUpdateError = (l: Lang, e: unknown): string =>
   l === 'en' ? `Update error: ${String(e)}` : `Ошибка обновления: ${String(e)}`
@@ -198,5 +212,20 @@ export const logNeed = (l: Lang, count: number, bytes: string): string =>
 
 export const logUpdated = (l: Lang, updated: number, version: string): string =>
   l === 'en'
-    ? `update: ok, ${updated} files, v${version}`
-    : `update: ok, ${updated} файлов, v${version}`
+    ? `update: ok, ${updated} files, ${vtag(version)}`
+    : `update: ok, ${updated} файлов, ${vtag(version)}`
+
+export const logCheckStats = (
+  l: Lang,
+  fast: number,
+  hashed: number,
+  hashedBytes: string
+): string =>
+  l === 'en'
+    ? `check: fast path ${fast} files, hashed ${hashed} (${hashedBytes})`
+    : `check: быстрый путь ${fast} файлов, по хешу ${hashed} (${hashedBytes})`
+
+export const logMtimeFail = (l: Lang, path: string, err: unknown): string =>
+  l === 'en'
+    ? `warning: cannot set mtime for ${path} (${String(err)})`
+    : `внимание: не удалось зафиксировать mtime для ${path} (${String(err)})`

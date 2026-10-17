@@ -24,6 +24,14 @@ export interface CheckResult {
   toUpdate: ManifestFile[]
   toUpdateBytes: number
   upToDate: boolean
+  /** Files accepted by size+mtime without hashing. */
+  fastMatched: number
+  /** Files that had to be hashed. */
+  hashed: number
+  /** Total bytes actually hashed (0 when everything matched fast). */
+  hashedBytes: number
+  /** Files whose mtime was repaired after a successful hash match. */
+  repaired: number
 }
 
 /** Path traversal protection for manifest entries. */
@@ -115,6 +123,10 @@ export async function checkForUpdates(
   }
 
   // Phase 1: cheap sequential stat pass.
+  let fastMatched = 0
+  let hashedBytes = 0
+  // Files whose timestamp drifted: if their hash matches we can repair mtime.
+  const stMismatch = new Set<number>()
   for (let i = 0; i < files.length; i++) {
     const f = files[i]
     const local = toLocalPath(installDir, f.path)
@@ -132,16 +144,20 @@ export async function checkForUpdates(
       continue
     }
     if (!forceHash && f.mtime != null && Math.floor(st.mtimeMs / 1000) === f.mtime) {
+      fastMatched++
       doneBytes += f.size
       emit(i)
       continue
     }
     toHash.push(i)
+    // Under forceHash we hash everything on purpose; nothing to repair.
+    if (!forceHash) stMismatch.add(i)
   }
 
   // Phase 2: hash the candidates in parallel.
   // A read error means the file is broken → queue for download, keep checking.
   let next = 0
+  let repaired = 0
   const worker = async (): Promise<void> => {
     while (true) {
       const k = next++
@@ -149,12 +165,24 @@ export async function checkForUpdates(
       const i = toHash[k]
       const f = files[i]
       try {
-        const digest = await hashFile(toLocalPath(installDir, f.path), (n) => {
+        const localPath = toLocalPath(installDir, f.path)
+        const digest = await hashFile(localPath, (n) => {
+          hashedBytes += n
           doneBytes += n
           emit(i)
         })
         if (digest.toLowerCase() !== f.sha256.toLowerCase()) {
           toUpdate.push(f)
+        } else if (f.mtime != null && stMismatch.has(i)) {
+          // Content is correct but the timestamp drifted (file predates the
+          // mtime-pinning code, or the filesystem moved it). Repair it so the
+          // next check takes the fast path instead of re-hashing forever.
+          try {
+            await fs.utimes(localPath, f.mtime, f.mtime)
+            repaired++
+          } catch {
+            // Filesystem refused: file stays on the hash path next time.
+          }
         }
       } catch {
         // Unreadable — treat as needing download.
@@ -179,7 +207,11 @@ export async function checkForUpdates(
     totalBytes,
     toUpdate,
     toUpdateBytes,
-    upToDate: toUpdate.length === 0
+    upToDate: toUpdate.length === 0,
+    fastMatched,
+    hashed: toHash.length,
+    hashedBytes,
+    repaired
   }
 }
 
