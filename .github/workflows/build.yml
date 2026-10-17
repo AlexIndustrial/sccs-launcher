@@ -1,8 +1,8 @@
 name: build
 
 on:
+  # Releases are cut from tags only; pushing a tag fires exactly one run.
   push:
-    branches: [main]
     tags: ['v*']
   pull_request:
     branches: [main]
