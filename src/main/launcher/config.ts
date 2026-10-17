@@ -2,17 +2,17 @@ import { app } from 'electron'
 import { join } from 'path'
 import { promises as fs } from 'fs'
 
-/** Основной сервер — всегда первый в списке, убрать нельзя. */
+/** The main server — always first in the list, cannot be removed. */
 export const DEFAULT_SERVER = 'https://cdn.sccs.dsrt.app'
 
 export interface LauncherConfig {
-  /** Выбранный сервер (всегда один из `servers`). */
+  /** Selected server (always one of `servers`). */
   serverUrl: string
-  /** Полный список для UI: [DEFAULT_SERVER, ...пользовательские]. */
+  /** Full list for the UI: [DEFAULT_SERVER, ...custom ones]. */
   servers: string[]
   installDir: string
   exeRelPath: string
-  /** Сколько файлов качать одновременно (1..16). */
+  /** How many files to download at once (1..16). */
   concurrency: number
 }
 
@@ -37,7 +37,7 @@ function normalizeServer(u: unknown): string | null {
   return t
 }
 
-/** Чистит пользовательский список: trim, только http(s), без дефолта и дублей. */
+/** Cleans the custom list: trim, http(s) only, no default, no dupes. */
 function cleanCustomServers(list: unknown): string[] {
   if (!Array.isArray(list)) return []
   const out: string[] = []
@@ -53,7 +53,7 @@ export async function loadConfig(): Promise<LauncherConfig> {
   try {
     const raw = await fs.readFile(configPath(), 'utf-8')
     const parsed = JSON.parse(raw) as Partial<LauncherConfig> & { servers?: unknown }
-    // Миграция старых конфигов: выбранный кастомный сервер подхватываем в список.
+    // Migrate legacy configs: adopt the selected custom server into the list.
     const customsRaw =
       parsed.servers ??
       (parsed.serverUrl && parsed.serverUrl !== DEFAULT_SERVER ? [parsed.serverUrl] : [])
@@ -81,7 +81,7 @@ export async function saveConfig(patch: Partial<LauncherConfig>): Promise<Launch
   const servers = [DEFAULT_SERVER, ...customs]
   let serverUrl = normalizeServer(patch.serverUrl ?? current.serverUrl) ?? DEFAULT_SERVER
   if (!servers.includes(serverUrl)) {
-    // Выбранный сервер убрали из списка (или он битый) — откат.
+    // The selected server was removed from the list (or is broken) — fall back.
     serverUrl = servers.includes(current.serverUrl) ? current.serverUrl : DEFAULT_SERVER
   }
   const next: LauncherConfig = {

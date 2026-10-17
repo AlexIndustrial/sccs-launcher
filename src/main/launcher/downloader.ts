@@ -7,11 +7,11 @@ import { toLocalPath, type ManifestFile } from './manifest'
 
 export interface ProgressEvent {
   phase: 'check' | 'download'
-  /** 0..1 по всем байтам очереди */
+  /** 0..1 across the whole queue */
   overallRatio: number
   doneBytes: number
   totalBytes: number
-  /** текущий файл */
+  /** current file */
   filePath: string
   fileDoneBytes: number
   fileSize: number
@@ -26,7 +26,7 @@ function encodeRelPath(rel: string): string {
     .join('/')
 }
 
-/** Скачивает один файл во временный `.tmp` и переименовывает после проверки хеша. */
+/** Downloads one file to a temporary `.tmp` and renames after hash check. */
 async function downloadOne(
   serverUrl: string,
   installDir: string,
@@ -55,7 +55,7 @@ async function downloadOne(
     }
   })
 
-  // res.body — Web ReadableStream; приводим к Node-стилю через async-итерацию
+  // res.body is a Web ReadableStream; convert to Node style via async iteration
   const { Readable } = await import('stream')
   const nodeStream = Readable.fromWeb(res.body as never)
 
@@ -71,17 +71,17 @@ async function downloadOne(
     throw new Error(`sha256 mismatch ${file.path}`)
   }
   await fs.rename(tmp, dest)
-  // Фиксируем mtime из манифеста, чтобы следующая проверка прошла
-  // по быстрому пути (размер + mtime) без хеширования.
+  // Pin mtime from the manifest so the next check takes
+  // the fast path (size + mtime) without hashing.
   if (file.mtime != null) {
     await fs.utimes(dest, file.mtime, file.mtime).catch(() => {})
   }
 }
 
 export interface DownloadOptions {
-  /** Сколько файлов качать одновременно. По умолчанию 4. */
+  /** How many files to download at once. Default 4. */
   concurrency?: number
-  /** Минимальный интервал progress-событий, мс. По умолчанию 100. */
+  /** Minimum interval between progress events, ms. Default 100. */
   progressThrottleMs?: number
 }
 
@@ -95,11 +95,7 @@ export async function downloadFiles(
   const totalBytes = files.reduce((a, f) => a + f.size, 0)
   if (files.length === 0) return
 
-  const concurrency = clamp(
-    Math.floor(options.concurrency ?? 4),
-    1,
-    16
-  )
+  const concurrency = clamp(Math.floor(options.concurrency ?? 4), 1, 16)
   const throttleMs = options.progressThrottleMs ?? 100
 
   let doneBytes = 0
@@ -148,10 +144,7 @@ export async function downloadFiles(
     }
   }
 
-  const workers = Array.from(
-    { length: Math.min(concurrency, files.length) },
-    () => worker()
-  )
+  const workers = Array.from({ length: Math.min(concurrency, files.length) }, () => worker())
   await Promise.all(workers)
 }
 

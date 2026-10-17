@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-/// Одна запись о файле игры. `path` — относительный путь от корня игры,
-/// всегда с `/` как разделителем (даже на Windows).
-/// `mtime` — время изменения (unix-секунды) на момент генерации манифеста:
-/// лаунчер пропускает хеширование, если совпали размер и mtime.
+/// One game file entry. `path` is relative to the game root,
+/// always with `/` as separator (even on Windows).
+/// `mtime` is the modification time (unix seconds) at manifest generation:
+/// the launcher skips hashing when size and mtime match.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileEntry {
     pub path: String,
@@ -20,11 +20,11 @@ pub struct Manifest {
     pub files: Vec<FileEntry>,
 }
 
-/// Папки верхнего уровня, которые не раздаём игрокам
-/// (серверная часть: шарды, матчмейкер и т.п.). Легко расширить.
+/// Top-level folders we don't distribute to players
+/// (server side: shards, matchmaker, etc.). Easy to extend.
 pub const EXCLUDED_TOP_LEVELS: &[&str] = &["cloud"];
 
-/// true, если путь лежит в исключённой папке.
+/// true if the path is inside an excluded folder.
 pub fn is_excluded(rel_unix: &str) -> bool {
     rel_unix
         .split('/')
@@ -38,12 +38,12 @@ fn now_rfc3339() -> String {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    // Без chrono — отдаём epoch + пометку. Лаунчеру важен только `version`.
+    // No chrono — we return epoch + note. Only `version` matters to the launcher.
     format!("{}", secs)
 }
 
-/// Рекурсивно сканирует `game_dir`, считает sha256 каждого файла.
-/// Пропускает сам `manifest.json` и временные `*.tmp` / `*.part` файлы.
+/// Recursively scans `game_dir`, computing sha256 of each file.
+/// Skips `manifest.json` itself and temporary `*.tmp` / `*.part` files.
 pub fn generate_manifest(
     game_dir: &std::path::Path,
     version: String,
@@ -64,7 +64,7 @@ pub fn generate_manifest(
         let rel = abs
             .strip_prefix(game_dir)
             .map_err(|e| e.to_string())?;
-        // нормализуем в unix-стиль
+        // normalize to unix style
         let rel_str = rel
             .components()
             .map(|c| c.as_os_str().to_string_lossy().into_owned())
@@ -74,11 +74,11 @@ pub fn generate_manifest(
         if rel_str == "manifest.json" {
             continue;
         }
-        // Служебные/скрытые файлы (`.gitkeep`, `.DS_Store`, ...) не раздаём.
+        // Service/hidden files (`.gitkeep`, `.DS_Store`, ...) are not distributed.
         if rel_str.split('/').any(|seg| seg.starts_with('.')) {
             continue;
         }
-        // Исключённые папки верхнего уровня (cloud и т.п.).
+        // Excluded top-level folders (cloud etc.).
         if is_excluded(&rel_str) {
             continue;
         }

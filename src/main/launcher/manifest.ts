@@ -7,7 +7,7 @@ export interface ManifestFile {
   path: string
   size: number
   sha256: string
-  /** unix-секунды изменения (может отсутствовать в старых манифестах). */
+  /** unix seconds of modification (may be absent in old manifests). */
   mtime?: number
 }
 
@@ -26,7 +26,7 @@ export interface CheckResult {
   upToDate: boolean
 }
 
-/** Защита от path traversal в манифесте. */
+/** Path traversal protection for manifest entries. */
 export function assertSafeRelPath(p: string): void {
   if (!p || p.includes('\\') || p.startsWith('/') || p.includes('\0')) {
     throw new Error(`unsafe path in manifest: ${p}`)
@@ -66,17 +66,17 @@ function hashFile(path: string, onChunk?: (bytes: number) => void): Promise<stri
 }
 
 export interface CheckOptions {
-  /** Игнорировать mtime и хешировать всё (медленно, но точно). */
+  /** Ignore mtime and hash everything (slow but exact). */
   forceHash?: boolean
-  /** Сколько файлов хешировать одновременно. По умолчанию 4. */
+  /** How many files to hash at once. Default 4. */
   concurrency?: number
 }
 
 /**
- * Сравнивает локальные файлы с манифестом.
+ * Compares local files against the manifest.
  *
- * Быстрый путь: совпали размер и mtime (секунды) — хеш не считаем.
- * Иначе файл хешируется (такие файлы проверяются параллельно пулом).
+ * Fast path: size and mtime (seconds) match — no hashing.
+ * The rest is hashed in parallel by a worker pool.
  */
 export async function checkForUpdates(
   manifest: Manifest,
@@ -114,7 +114,7 @@ export async function checkForUpdates(
     })
   }
 
-  // Фаза 1: быстрый stat-проход (последовательно, это дёшево).
+  // Phase 1: cheap sequential stat pass.
   for (let i = 0; i < files.length; i++) {
     const f = files[i]
     const local = toLocalPath(installDir, f.path)
@@ -139,8 +139,8 @@ export async function checkForUpdates(
     toHash.push(i)
   }
 
-  // Фаза 2: хеширование кандидатов параллельно.
-  // Ошибка чтения = файл битый → в очередь на скачивание, проверка продолжается.
+  // Phase 2: hash the candidates in parallel.
+  // A read error means the file is broken → queue for download, keep checking.
   let next = 0
   const worker = async (): Promise<void> => {
     while (true) {
@@ -157,22 +157,19 @@ export async function checkForUpdates(
           toUpdate.push(f)
         }
       } catch {
-        // Не прочитался — считаем требующим скачивания.
+        // Unreadable — treat as needing download.
         toUpdate.push(f)
         doneBytes += f.size
       }
       emit(i)
     }
   }
-  const workers = Array.from(
-    { length: Math.min(concurrency, toHash.length) },
-    () => worker()
-  )
+  const workers = Array.from({ length: Math.min(concurrency, toHash.length) }, () => worker())
   await Promise.all(workers)
 
   if (files.length > 0) emit(files.length - 1, true)
 
-  // Нормализатор для Windows: путь манифеста всегда с `/`
+  // Normalizer for Windows: manifest paths always use `/`
   void sep
 
   const toUpdateBytes = toUpdate.reduce((a, f) => a + f.size, 0)

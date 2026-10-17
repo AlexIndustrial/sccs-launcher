@@ -8,7 +8,7 @@ function senderWindow(win: BrowserWindow | null): BrowserWindow | null {
   return win
 }
 
-/** Регистрирует IPC лаунчера. `getWindow` — для push-а прогресса. */
+/** Registers launcher IPC. `getWindow` is used to push progress events. */
 export function registerLauncherIpc(getWindow: () => BrowserWindow | null): void {
   ipcMain.handle('launcher:get-config', async () => loadConfig())
 
@@ -45,7 +45,7 @@ export function registerLauncherIpc(getWindow: () => BrowserWindow | null): void
       concurrency: cfg.concurrency
     })
 
-    // финальная перепроверка
+    // final re-check
     const recheck = await checkForUpdates(manifest, cfg.installDir, onProgress, {
       concurrency: cfg.concurrency
     })
@@ -59,7 +59,7 @@ export function registerLauncherIpc(getWindow: () => BrowserWindow | null): void
     const cfg = await loadConfig()
     const win = senderWindow(getWindow())
     const options: Electron.OpenDialogOptions = {
-      title: 'Выбери папку установки игры',
+      title: 'Choose the game install folder',
       defaultPath: cfg.installDir,
       properties: ['openDirectory', 'createDirectory']
     }
@@ -75,8 +75,8 @@ export function registerLauncherIpc(getWindow: () => BrowserWindow | null): void
     return playGame(cfg.installDir, cfg.exeRelPath)
   })
 
-  // Подгон высоты окна под контент (рендерер присылает scrollHeight).
-  // Ширина фиксирована, высота клампится под рабочую область экрана.
+  // Fit window height to content (renderer sends scrollHeight).
+  // Width is fixed, height is clamped to the screen work area.
   ipcMain.handle('launcher:fit-window', async (_e, height: unknown) => {
     const win = senderWindow(getWindow())
     if (!win || typeof height !== 'number' || !Number.isFinite(height)) return

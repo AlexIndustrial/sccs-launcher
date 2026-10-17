@@ -102,7 +102,7 @@ body {
   margin: 0 auto 8px;
 }
 
-/* переключатель RU | EN, как на сайте */
+/* RU | EN switch, like on the website */
 .sc-lang {
   display: inline-flex;
   align-items: center;
@@ -171,7 +171,7 @@ body {
   vertical-align: top;
 }
 
-/* одна строка всегда: без переносов высота пилюли стабильна */
+/* always a single line: no wrapping keeps the pill height stable */
 .sc-pill .dot {
   flex-shrink: 0;
   width: 8px;
@@ -208,8 +208,8 @@ body {
   gap: 12px;
 }
 
-/* grid-элементы по умолчанию min-width:auto и не ужимаются уже nowrap-контента —
-   без этого длинные строки распирают всю колонку */
+/* grid items default to min-width:auto and refuse to shrink below nowrap content —
+   without this, long lines blow out the whole column */
 .sc-body > * {
   min-width: 0;
 }
@@ -230,7 +230,7 @@ body {
   margin-bottom: 14px;
 }
 
-/* ---- buttons (как на сайте) ---- */
+/* ---- buttons (like on the website) ---- */
 .sc-btn {
   font-family: var(--sc-display);
   text-transform: uppercase;
@@ -389,7 +389,7 @@ select.sc-input option {
   border-radius: 10px;
 }
 
-/* ползунок потоков */
+/* threads slider */
 input[type='range'].sc-range {
   -webkit-appearance: none;
   appearance: none;
@@ -448,7 +448,7 @@ input[type='range'].sc-range::-moz-range-thumb {
   overflow-wrap: anywhere;
 }
 
-/* подпись внизу */
+/* bottom signature */
 .sc-sign {
   display: flex;
   align-items: center;

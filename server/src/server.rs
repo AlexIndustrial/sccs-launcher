@@ -11,11 +11,11 @@ use tower_http::services::{ServeDir, ServeFile};
 
 use crate::manifest::is_excluded;
 
-/// Не отдаём исключённые папки даже напрямую по URL
-/// (в манифесте их нет, но перестраховываемся на случай ручных запросов).
+/// Never serve excluded folders, even on direct URL access
+/// (they're not in the manifest, but let's be safe against manual requests).
 async fn block_excluded(req: Request<Body>, next: Next) -> Result<Response, StatusCode> {
     let inner = req.uri().path().strip_prefix("/files/").unwrap_or("");
-    // Декодируем %XX, чтобы нельзя было обойти блокировку через `/%63loud/...`.
+    // Decode %XX so the block can't be bypassed via `/%63loud/...`.
     let decoded = percent_decode(inner);
     if is_excluded(&decoded) {
         return Err(StatusCode::NOT_FOUND);
@@ -52,19 +52,19 @@ fn hex_val(b: u8) -> Option<u8> {
     }
 }
 
-/// Запускает HTTP-сервер раздачи:
+/// Starts the distribution HTTP server:
 /// - GET /health
 /// - GET /manifest.json
-/// - GET /files/*  (с поддержкой Range — её даёт ServeDir из tower-http)
+/// - GET /files/*  (Range support comes from tower-http's ServeDir)
 pub async fn serve(game_dir: PathBuf, host: String, port: u16) -> Result<(), String> {
     let game_dir = game_dir
         .canonicalize()
-        .map_err(|e| format!("game-dir не найден: {e}"))?;
+        .map_err(|e| format!("game-dir not found: {e}"))?;
 
     let manifest_path = game_dir.join("manifest.json");
     if !manifest_path.exists() {
         eprintln!(
-            "ВНИМАНИЕ: {} не найден. Сначала выполните `generate`.",
+            "WARNING: {} not found. Run `generate` first.",
             manifest_path.display()
         );
     }

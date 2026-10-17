@@ -6,13 +6,13 @@ export interface PlayResult {
   pid: number
 }
 
-/** Запускает exe игры detached-процессом. */
+/** Launches the game exe as a detached process. */
 export async function playGame(installDir: string, exeRelPath: string): Promise<PlayResult> {
   const exe = toLocalPath(installDir, exeRelPath)
   try {
     await fs.access(exe)
   } catch {
-    throw new Error(`exe не найден: ${exe}. Сначала нажми "Обновить".`)
+    throw new Error(`exe not found: ${exe}. Press "Update" first.`)
   }
 
   const child = spawn(exe, [], {
@@ -23,6 +23,6 @@ export async function playGame(installDir: string, exeRelPath: string): Promise<
   })
   child.on('error', () => {})
   child.unref()
-  if (!child.pid) throw new Error('не удалось запустить игру')
+  if (!child.pid) throw new Error('failed to start the game')
   return { pid: child.pid }
 }

@@ -4,7 +4,7 @@ mod server;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-/// sccs-server: генерация manifest.json + раздача файлов игры Star Conflict (MVP).
+/// sccs-server: manifest.json generation + Star Conflict game file distribution (MVP).
 #[derive(Parser, Debug)]
 #[command(name = "sccs-server", version)]
 struct Cli {
@@ -14,19 +14,19 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Cmd {
-    /// Просканировать game-dir, посчитать sha256 и записать manifest.json
+    /// Scan game-dir, compute sha256 and write manifest.json
     Generate {
-        /// Корень игры на диске сервера (то, что раздаём)
+        /// Game root on the server disk (what we distribute)
         #[arg(long, default_value = "game")]
         game_dir: PathBuf,
-        /// Куда положить манифест (по умолчанию <game-dir>/manifest.json)
+        /// Where to put the manifest (default: <game-dir>/manifest.json)
         #[arg(long)]
         output: Option<PathBuf>,
-        /// Версия сборки (по умолчанию — unix timestamp)
+        /// Build version (default: v3)
         #[arg(long)]
         version: Option<String>,
     },
-    /// Раздавать game-dir по HTTP
+    /// Serve game-dir over HTTP
     Serve {
         #[arg(long, default_value = "game")]
         game_dir: PathBuf,
@@ -72,7 +72,7 @@ fn cmd_generate(
     version: Option<String>,
 ) -> Result<(), String> {
     if !game_dir.exists() {
-        return Err(format!("game-dir не существует: {}", game_dir.display()));
+        return Err(format!("game-dir does not exist: {}", game_dir.display()));
     }
     let version = version.unwrap_or_else(|| "v3".into());
 

@@ -1,8 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
-// Типы дублируют src/main/launcher/*.ts (держим preload независимым от main).
-// Дублирует DEFAULT_SERVER из src/main/launcher/config.ts.
+// Types mirror src/main/launcher/*.ts (keep preload independent from main).
+// Mirrors DEFAULT_SERVER from src/main/launcher/config.ts.
 export const DEFAULT_SERVER = 'https://cdn.sccs.dsrt.app'
 
 export interface LauncherConfig {

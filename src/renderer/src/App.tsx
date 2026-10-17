@@ -21,6 +21,8 @@ import {
   logPickDirError,
   logServerAdded,
   logServerRemoved,
+  logNeed,
+  logUpdated,
   type Lang
 } from './i18n'
 
@@ -102,7 +104,7 @@ function App(): React.JSX.Element {
   const changeLang = (l: Lang): void => {
     if (l === lang || busy) return
     saveLang(l)
-    // Полная перезагрузка, чтобы точно всё обновилось.
+    // Full reload so everything is guaranteed fresh.
     window.location.reload()
   }
 
@@ -133,8 +135,8 @@ function App(): React.JSX.Element {
     return off
   }, [])
 
-  // Подгон высоты окна под контент: после монтирования и при смене языка
-  // (шрифты/картинки могут догрузиться позже — повторяем замер).
+  // Fit window height to content: after mount and on language change
+  // (fonts/images may load later — re-measure).
   useEffect(() => {
     let cancelled = false
     const fit = (): void => {
@@ -156,8 +158,8 @@ function App(): React.JSX.Element {
   }, [lang])
 
   const hasProgress = progress !== null
-  // Прогресс появился после стартового замера — подрасти под него.
-  // Обратное схлопывание не делаем, чтобы окно не дёргалось.
+  // Progress appeared after the initial measurement — grow into it.
+  // Never shrink back, so the window doesn't jump.
   useEffect(() => {
     if (!hasProgress) return
     const t = setTimeout(() => {
@@ -228,7 +230,7 @@ function App(): React.JSX.Element {
         setCanPlay(true)
       } else {
         setStatus(stNeed(lang, r.toUpdate.length, fmtBytes(r.toUpdateBytes), r.totalFiles))
-        pushLog(`check: надо обновить ${r.toUpdate.length}, ${fmtBytes(r.toUpdateBytes)}`)
+        pushLog(logNeed(lang, r.toUpdate.length, fmtBytes(r.toUpdateBytes)))
         setCanPlay(false)
       }
     } catch (e) {
@@ -247,7 +249,7 @@ function App(): React.JSX.Element {
       setStatus(stDownloading(lang))
       const r = await window.api.update()
       setStatus(stUpdated(lang, r.updated, r.version))
-      pushLog(`update: ok, ${r.updated} файлов, v${r.version}`)
+      pushLog(logUpdated(lang, r.updated, r.version))
       setCanPlay(true)
     } catch (e) {
       setStatus(stUpdateError(lang, e))
@@ -327,7 +329,7 @@ function App(): React.JSX.Element {
             </div>
           </div>
 
-          {/* Без резерва места: при появлении прогресса окно подрастает (см. эффект ниже) */}
+          {/* No reserved space: when progress appears the window grows (see effect below) */}
           {progress && (
             <div className="sc-progress-wrap">
               <div className="sc-progress-track">

@@ -101,7 +101,7 @@ export function strs(lang: Lang): Strings {
   return lang === 'en' ? en : ru
 }
 
-// ---- динамические статусы и строки лога ----
+// ---- dynamic statuses and log lines ----
 
 export const stLoading = (l: Lang): string => (l === 'en' ? 'Loading config…' : 'Загрузка конфига…')
 
@@ -162,3 +162,11 @@ export const logServerAdded = (l: Lang, url: string): string =>
 
 export const logServerRemoved = (l: Lang, url: string): string =>
   l === 'en' ? `server removed, selected: ${url}` : `сервер убран, выбран: ${url}`
+
+export const logNeed = (l: Lang, count: number, bytes: string): string =>
+  l === 'en' ? `check: ${count} to update, ${bytes}` : `check: надо обновить ${count}, ${bytes}`
+
+export const logUpdated = (l: Lang, updated: number, version: string): string =>
+  l === 'en'
+    ? `update: ok, ${updated} files, v${version}`
+    : `update: ok, ${updated} файлов, v${version}`
