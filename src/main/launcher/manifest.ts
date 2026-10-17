@@ -59,18 +59,183 @@ export async function fetchManifest(serverUrl: string): Promise<Manifest> {
   return m
 }
 
-function hashFile(path: string, onChunk?: (bytes: number) => void): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const h = createHash('sha256')
-    const s = createReadStream(path)
-    s.on('error', reject)
-    s.on('data', (c) => {
-      const buf = c as Buffer
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+/** Hashing more than a few files at once starves the disk queue and freezes Windows. */
+const MAX_HASH_WORKERS = 4
+/** How often the I/O sampler measures throughput. */
+const IO_POLL_MS = 1000
+/** Ignore the first interval: it is dominated by stream startup cost. */
+const IO_WARMUP_MS = 1500
+/** Keep aggregate reads under this fraction of what the disk actually delivers. */
+const THROTTLE_RATIO = 0.85
+/** Below this fraction of the best rate we assume seek thrash and back off. */
+const LOSS_RATIO = 0.55
+/** Above this fraction we allow another worker. */
+const GAIN_RATIO = 0.9
+const BACKOFF_COOLDOWN_MS = 1500
+const RAMP_COOLDOWN_MS = 3000
+/** Never sleep longer than this in one go, so cancellation stays responsive. */
+const MAX_PACE_SLEEP_MS = 1000
+
+/**
+ * Paces aggregate reads just below what the disk actually sustains, so the
+ * request queue never backs up and the rest of the system stays responsive.
+ * The target is learned at runtime by {@link IoSampler}.
+ */
+class Pacer {
+  private readonly startedAt = Date.now()
+  private consumed = 0
+  private targetBytesPerSec = 0
+
+  setTarget(bytesPerSec: number): void {
+    this.targetBytesPerSec = bytesPerSec
+  }
+
+  async take(bytes: number): Promise<void> {
+    this.consumed += bytes
+    if (this.targetBytesPerSec <= 0) return
+    const owedMs = (this.consumed / this.targetBytesPerSec) * 1000 - (Date.now() - this.startedAt)
+    if (owedMs > 1) await sleep(Math.min(owedMs, MAX_PACE_SLEEP_MS))
+  }
+}
+
+export interface WorkerDecision {
+  workers: number
+  cooldownUntil: number
+}
+
+/**
+ * Pure policy for the I/O sampler, kept separate so it can be tested without
+ * moving gigabytes.
+ *
+ * `rate` well below `bestRate` while several streams are open is the signature
+ * of seek thrash: back off. A rate at or above `bestRate` means the disk is
+ * keeping up, so one more stream may be allowed.
+ */
+export function decideWorkerCount(
+  workers: number,
+  rate: number,
+  bestRate: number,
+  maxWorkers: number,
+  now: number,
+  cooldownUntil: number
+): WorkerDecision | null {
+  if (bestRate <= 0 || rate <= 0) return null
+  if (now < cooldownUntil) return null
+  if (workers > 1 && rate < bestRate * LOSS_RATIO) {
+    return { workers: workers - 1, cooldownUntil: now + BACKOFF_COOLDOWN_MS }
+  }
+  if (workers < maxWorkers && rate > bestRate * GAIN_RATIO) {
+    return { workers: workers + 1, cooldownUntil: now + RAMP_COOLDOWN_MS }
+  }
+  return null
+}
+
+/**
+ * Polls hashing throughput and adapts the worker count.
+ *
+ * A drop in aggregate throughput while more workers are active is the
+ * signature of seek thrash on spinning disks: fewer streams restore both
+ * speed and desktop responsiveness.
+ */
+class IoSampler {
+  private timer: NodeJS.Timeout | null = null
+  private lastBytes = 0
+  private lastAt = 0
+  private startedAt = 0
+  private bestRate = 0
+  private seeded = false
+  private cooldownUntil = 0
+  private readonly workers: () => number
+  private readonly maxWorkers: number
+  private readonly setWorkers: (n: number) => void
+  private readonly pacer: Pacer
+  private readonly readCounter: () => number
+
+  constructor(
+    workers: () => number,
+    maxWorkers: number,
+    setWorkers: (n: number) => void,
+    pacer: Pacer,
+    readCounter: () => number
+  ) {
+    this.workers = workers
+    this.maxWorkers = maxWorkers
+    this.setWorkers = setWorkers
+    this.pacer = pacer
+    this.readCounter = readCounter
+  }
+
+  start(): void {
+    this.lastAt = Date.now()
+    this.startedAt = this.lastAt
+    this.timer = setInterval(() => this.poll(), IO_POLL_MS)
+  }
+
+  stop(): void {
+    if (this.timer) clearInterval(this.timer)
+    this.timer = null
+  }
+
+  private poll(): void {
+    const now = Date.now()
+    const dtSec = (now - this.lastAt) / 1000
+    const bytes = this.readCounter()
+    const rate = dtSec > 0 ? (bytes - this.lastBytes) / dtSec : 0
+    this.lastBytes = bytes
+    this.lastAt = now
+
+    if (now - this.startedAt < IO_WARMUP_MS) return
+
+    // Seed from the first settled sample: warmup reads are served from the
+    // page cache and would inflate the ceiling, disabling the throttle.
+    if (!this.seeded) {
+      this.seeded = true
+      this.bestRate = rate
+    } else if (rate > this.bestRate) {
+      this.bestRate = rate
+    }
+    if (this.bestRate <= 0 || rate <= 0) return
+
+    // Hold reads just under the sustained rate: this, not the worker count, is
+    // what keeps the disk request queue from backing up and stalling Windows.
+    this.pacer.setTarget(this.bestRate * THROTTLE_RATIO)
+
+    const decision = decideWorkerCount(
+      this.workers(),
+      rate,
+      this.bestRate,
+      this.maxWorkers,
+      now,
+      this.cooldownUntil
+    )
+    if (!decision) return
+    this.setWorkers(decision.workers)
+    this.cooldownUntil = decision.cooldownUntil
+  }
+}
+
+async function hashFile(
+  path: string,
+  onChunk?: (bytes: number) => void,
+  pacer?: Pacer
+): Promise<string> {
+  const h = createHash('sha256')
+  const s = createReadStream(path, { highWaterMark: 512 * 1024 })
+  try {
+    for await (const chunk of s) {
+      const buf = chunk as Buffer
       h.update(buf)
       onChunk?.(buf.length)
-    })
-    s.on('end', () => resolve(h.digest('hex')))
-  })
+      if (pacer) await pacer.take(buf.length)
+    }
+  } finally {
+    s.destroy()
+  }
+  return h.digest('hex')
 }
 
 export interface CheckOptions {
@@ -94,7 +259,6 @@ export async function checkForUpdates(
 ): Promise<CheckResult> {
   const files = manifest.files
   const totalBytes = files.reduce((a, f) => a + f.size, 0)
-  const concurrency = clamp(Math.floor(options.concurrency ?? 4), 1, 16)
   const forceHash = options.forceHash === true
 
   const toUpdate: ManifestFile[] = []
@@ -154,23 +318,45 @@ export async function checkForUpdates(
     if (!forceHash) stMismatch.add(i)
   }
 
-  // Phase 2: hash the candidates in parallel.
-  // A read error means the file is broken → queue for download, keep checking.
+  // Phase 2: hash the candidates with a worker pool that shrinks when the disk
+  // starts thrashing. A read error means the file is broken → queue for
+  // download, keep checking.
+  const capWorkers = clamp(Math.floor(options.concurrency ?? 4), 1, MAX_HASH_WORKERS)
+  const pacer = new Pacer()
   let next = 0
+  let running = 0
+  let desired = Math.min(capWorkers, Math.max(1, toHash.length))
   let repaired = 0
+  const active = new Set<Promise<void>>()
+
+  const pump = (): void => {
+    while (running < desired && next < toHash.length) {
+      running++
+      const p: Promise<void> = worker().finally(() => {
+        active.delete(p)
+      })
+      active.add(p)
+    }
+  }
+
   const worker = async (): Promise<void> => {
-    while (true) {
+    while (next < toHash.length && running <= desired) {
       const k = next++
-      if (k >= toHash.length) return
       const i = toHash[k]
       const f = files[i]
+      let fileDone = 0
       try {
         const localPath = toLocalPath(installDir, f.path)
-        const digest = await hashFile(localPath, (n) => {
-          hashedBytes += n
-          doneBytes += n
-          emit(i)
-        })
+        const digest = await hashFile(
+          localPath,
+          (n) => {
+            fileDone += n
+            hashedBytes += n
+            doneBytes += n
+            emit(i)
+          },
+          pacer
+        )
         if (digest.toLowerCase() !== f.sha256.toLowerCase()) {
           toUpdate.push(f)
         } else if (f.mtime != null && stMismatch.has(i)) {
@@ -185,15 +371,30 @@ export async function checkForUpdates(
           }
         }
       } catch {
-        // Unreadable — treat as needing download.
+        // Unreadable — treat as needing download. Only the unread tail is
+        // still outstanding; the chunks already counted must not double up.
         toUpdate.push(f)
-        doneBytes += f.size
+        doneBytes += Math.max(0, f.size - fileDone)
       }
       emit(i)
     }
+    running--
+    pump()
   }
-  const workers = Array.from({ length: Math.min(concurrency, toHash.length) }, () => worker())
-  await Promise.all(workers)
+
+  const sampler = new IoSampler(
+    () => desired,
+    capWorkers,
+    (n) => {
+      desired = clamp(n, 1, capWorkers)
+    },
+    pacer,
+    () => hashedBytes
+  )
+  sampler.start()
+  pump()
+  while (active.size > 0) await Promise.race(active)
+  sampler.stop()
 
   if (files.length > 0) emit(files.length - 1, true)
 
