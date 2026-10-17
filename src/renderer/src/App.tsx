@@ -38,6 +38,22 @@ interface Progress {
   fileCount: number
 }
 
+interface AppUpdateInfo {
+  version: string
+  releaseDate: string
+  releaseNotes: string | null
+}
+
+interface AppUpdateProgress {
+  percent: number
+  transferred: number
+  total: number
+  bytesPerSecond: number
+}
+
+type AppUpdateState =
+  'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'ready' | 'error'
+
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
@@ -87,6 +103,10 @@ function GithubIcon(): React.JSX.Element {
 
 function App(): React.JSX.Element {
   const [lang] = useState<Lang>(() => loadLang())
+  const [appUpdate, setAppUpdate] = useState<AppUpdateState>('idle')
+  const [appUpdateInfo, setAppUpdateInfo] = useState<AppUpdateInfo | null>(null)
+  const [appUpdateProgress, setAppUpdateProgress] = useState<AppUpdateProgress | null>(null)
+  const [appUpdateError, setAppUpdateError] = useState<string | null>(null)
   const [serverUrl, setServerUrl] = useState(window.api.defaultServer)
   const [servers, setServers] = useState<string[]>([])
   const [newServer, setNewServer] = useState('')
@@ -132,7 +152,33 @@ function App(): React.JSX.Element {
       .catch((e) => setStatus(stConfigError(loadLang(), e)))
 
     const off = window.api.onProgress((p) => setProgress(p))
-    return off
+    const offUpd = window.api.onAppUpdate((state, payload) => {
+      setAppUpdate(state)
+      switch (state) {
+        case 'available':
+          setAppUpdateInfo(payload as AppUpdateInfo)
+          setAppUpdateError(null)
+          break
+        case 'not-available':
+          setAppUpdateInfo(null)
+          break
+        case 'downloading':
+          setAppUpdateProgress(payload as AppUpdateProgress)
+          break
+        case 'ready':
+          setAppUpdateProgress(null)
+          break
+        case 'error':
+          setAppUpdateError(String(payload ?? ''))
+          break
+        default:
+          break
+      }
+    })
+    return () => {
+      off()
+      offUpd()
+    }
   }, [])
 
   // Fit window height to content: after mount and on language change
@@ -282,6 +328,45 @@ function App(): React.JSX.Element {
     }
   }
 
+  const handleAppUpdateCheck = async (): Promise<void> => {
+    setAppUpdateError(null)
+    setAppUpdate('checking')
+    try {
+      const r = await window.api.checkAppUpdate()
+      if (r.available && r.info) {
+        setAppUpdateInfo(r.info)
+        setAppUpdate('available')
+        pushLog(`app update available: v${r.info.version}`)
+      } else {
+        setAppUpdate('not-available')
+        pushLog('app update: up-to-date')
+      }
+    } catch (e) {
+      const msg = String(e)
+      setAppUpdate('error')
+      setAppUpdateError(msg)
+      pushLog(`app update check failed: ${msg}`)
+    }
+  }
+
+  const handleAppUpdateDownload = async (): Promise<void> => {
+    setAppUpdateError(null)
+    try {
+      await window.api.downloadAppUpdate()
+      setAppUpdate('ready')
+      pushLog('app update downloaded')
+    } catch (e) {
+      const msg = String(e)
+      setAppUpdate('error')
+      setAppUpdateError(msg)
+      pushLog(`app update download failed: ${msg}`)
+    }
+  }
+
+  const handleAppUpdateInstall = async (): Promise<void> => {
+    await window.api.installAppUpdate()
+  }
+
   const pct = progress ? Math.round(progress.overallRatio * 100) : 0
   const phaseLabel = progress?.phase === 'check' ? S.checking : S.downloading
   const progressText = progress
@@ -338,6 +423,69 @@ function App(): React.JSX.Element {
               <div className="sc-progress-label" title={progressText}>
                 {progressText}
               </div>
+            </div>
+          )}
+        </section>
+
+        <section className="sc-card">
+          <h2>{S.appUpdate}</h2>
+
+          {appUpdate === 'available' && appUpdateInfo && (
+            <div className="sc-update-box">
+              <p className="sc-update-title">
+                {S.appUpdateAvailable}: <b>v{appUpdateInfo.version}</b>
+              </p>
+              <div className="sc-btn-row">
+                <button className="sc-btn sc-btn-ghost" onClick={handleAppUpdateDownload}>
+                  {S.appUpdateDownloading}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {appUpdate === 'downloading' && (
+            <div className="sc-update-box">
+              <div className="sc-progress-track">
+                <div
+                  className="sc-progress-fill"
+                  style={{ width: `${Math.round(appUpdateProgress?.percent ?? 0)}%` }}
+                />
+              </div>
+              <div className="sc-progress-label">
+                {S.appUpdateDownloading} {Math.round(appUpdateProgress?.percent ?? 0)}%
+              </div>
+            </div>
+          )}
+
+          {appUpdate === 'ready' && (
+            <div className="sc-update-box">
+              <p className="sc-update-title">{S.appUpdateReady}</p>
+              <button className="sc-btn sc-btn-play" onClick={handleAppUpdateInstall}>
+                {S.appUpdateInstall}
+              </button>
+            </div>
+          )}
+
+          {appUpdate === 'error' && (
+            <div className="sc-update-box">
+              <p className="sc-update-title">{S.appUpdateFailed}</p>
+              {appUpdateError && <p className="sc-progress-label">{appUpdateError}</p>}
+            </div>
+          )}
+
+          {appUpdate === 'not-available' && (
+            <p className="sc-progress-label">{S.appUpdateUpToDate}</p>
+          )}
+
+          {appUpdate !== 'ready' && (
+            <div className="sc-btn-row" style={{ marginTop: 8 }}>
+              <button
+                className="sc-btn sc-btn-ghost"
+                disabled={appUpdate === 'checking' || appUpdate === 'downloading'}
+                onClick={handleAppUpdateCheck}
+              >
+                {appUpdate === 'checking' ? S.appUpdateChecking : S.appUpdateCheck}
+              </button>
             </div>
           )}
         </section>

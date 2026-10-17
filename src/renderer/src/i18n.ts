@@ -41,6 +41,16 @@ interface Strings {
   trustWarnHint: string
   trustWarnConfirm: string
   footerBy: string
+  appUpdate: string
+  appUpdateCheck: string
+  appUpdateChecking: string
+  appUpdateUpToDate: string
+  appUpdateAvailable: string
+  appUpdateDownloading: string
+  appUpdateReady: string
+  appUpdateFailed: string
+  appUpdateInstall: string
+  appUpdateDevNote: string
 }
 
 const ru: Strings = {
@@ -67,7 +77,17 @@ const ru: Strings = {
     'Добавляй только серверы, которым доверяешь: игра скачивается с выбранного сервера, чужой сервер может подсунуть вредоносное ПО.',
   trustWarnConfirm:
     'Добавляешь сторонний сервер. Скачивай игру только с серверов, которым доверяешь — иначе можно загрузить вредоносное ПО.\n\nПродолжить?',
-  footerBy: 'build by'
+  footerBy: 'build by',
+  appUpdate: 'Программа',
+  appUpdateCheck: 'Проверить обновление',
+  appUpdateChecking: 'Проверка обновлений…',
+  appUpdateUpToDate: 'Установлена последняя версия',
+  appUpdateAvailable: 'Доступно обновление',
+  appUpdateDownloading: 'Загрузка обновления…',
+  appUpdateReady: 'Обновление готово к установке',
+  appUpdateFailed: 'Ошибка обновления',
+  appUpdateInstall: 'Установить и перезапустить',
+  appUpdateDevNote: 'В dev-режиме автообновление недоступно'
 }
 
 const en: Strings = {
@@ -94,7 +114,17 @@ const en: Strings = {
     'Only add servers you trust: the game is downloaded from the selected server, a stranger server could serve malware.',
   trustWarnConfirm:
     'You are adding a third-party server. Only download the game from servers you trust — otherwise you may get malware.\n\nContinue?',
-  footerBy: 'build by'
+  footerBy: 'build by',
+  appUpdate: 'App',
+  appUpdateCheck: 'Check for update',
+  appUpdateChecking: 'Checking for updates…',
+  appUpdateUpToDate: 'Latest version installed',
+  appUpdateAvailable: 'Update available',
+  appUpdateDownloading: 'Downloading update…',
+  appUpdateReady: 'Update ready to install',
+  appUpdateFailed: 'Update error',
+  appUpdateInstall: 'Install and restart',
+  appUpdateDevNote: 'Auto-update is unavailable in dev mode'
 }
 
 export function strs(lang: Lang): Strings {

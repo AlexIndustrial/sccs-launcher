@@ -41,6 +41,22 @@ export interface ProgressEvent {
   fileCount: number
 }
 
+export interface AppUpdateInfo {
+  version: string
+  releaseDate: string
+  releaseNotes: string | null
+}
+
+export interface AppUpdateProgress {
+  percent: number
+  transferred: number
+  total: number
+  bytesPerSecond: number
+}
+
+export type AppUpdateState =
+  'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'ready' | 'error'
+
 const api = {
   defaultServer: DEFAULT_SERVER,
   getConfig: (): Promise<LauncherConfig> => ipcRenderer.invoke('launcher:get-config'),
@@ -52,6 +68,19 @@ const api = {
   play: (): Promise<{ pid: number }> => ipcRenderer.invoke('launcher:play'),
   pickDir: (): Promise<string | null> => ipcRenderer.invoke('launcher:pick-dir'),
   fitWindow: (height: number): Promise<void> => ipcRenderer.invoke('launcher:fit-window', height),
+
+  checkAppUpdate: (): Promise<{ available: boolean; info?: AppUpdateInfo }> =>
+    ipcRenderer.invoke('launcher:update-check'),
+  downloadAppUpdate: (): Promise<AppUpdateInfo | null> =>
+    ipcRenderer.invoke('launcher:update-download'),
+  installAppUpdate: (): Promise<void> => ipcRenderer.invoke('launcher:update-install'),
+  onAppUpdate: (cb: (state: AppUpdateState, payload: unknown) => void): (() => void) => {
+    const listener = (_e: unknown, msg: { state: AppUpdateState; payload?: unknown }): void =>
+      cb(msg.state, msg.payload)
+    ipcRenderer.on('launcher:app-update', listener as never)
+    return () => ipcRenderer.removeListener('launcher:app-update', listener as never)
+  },
+
   onProgress: (cb: (p: ProgressEvent) => void): (() => void) => {
     const listener = (_e: unknown, p: ProgressEvent): void => cb(p)
     ipcRenderer.on('launcher:progress', listener as never)

@@ -3,6 +3,13 @@ import { loadConfig, saveConfig } from './config'
 import { checkForUpdates, fetchManifest } from './manifest'
 import { downloadFiles, type ProgressEvent } from './downloader'
 import { playGame } from './game'
+import {
+  checkForAppUpdate,
+  downloadAppUpdate,
+  quitAndInstall,
+  setupAutoUpdater,
+  type UpdateState
+} from './updater'
 
 function senderWindow(win: BrowserWindow | null): BrowserWindow | null {
   return win
@@ -50,7 +57,7 @@ export function registerLauncherIpc(getWindow: () => BrowserWindow | null): void
       concurrency: cfg.concurrency
     })
     if (!recheck.upToDate) {
-      throw new Error(`проверка после скачивания не прошла: осталось ${recheck.toUpdate.length}`)
+      throw new Error(`post-download verification failed: ${recheck.toUpdate.length} left`)
     }
     return { updated: checked.toUpdate.length, version: manifest.version }
   })
@@ -73,6 +80,25 @@ export function registerLauncherIpc(getWindow: () => BrowserWindow | null): void
   ipcMain.handle('launcher:play', async () => {
     const cfg = await loadConfig()
     return playGame(cfg.installDir, cfg.exeRelPath)
+  })
+
+  ipcMain.handle('launcher:update-check', async () => {
+    return checkForAppUpdate()
+  })
+
+  ipcMain.handle('launcher:update-download', async () => {
+    return downloadAppUpdate()
+  })
+
+  ipcMain.handle('launcher:update-install', async () => {
+    quitAndInstall()
+  })
+
+  // Background check: forward updater events to the renderer.
+  setupAutoUpdater((state: UpdateState, payload?: unknown) => {
+    const win = senderWindow(getWindow())
+    if (!win) return
+    win.webContents.send('launcher:app-update', { state, payload })
   })
 
   // Fit window height to content (renderer sends scrollHeight).
