@@ -360,17 +360,22 @@ function App(): React.JSX.Element {
       <div className="sc-body">
         <section className="sc-card">
           <div style={{ display: 'grid', gap: 10 }}>
+            {/* Primary action follows the check result: Update > Play > Check. */}
             {gameState === 'needs-update' ? (
               <button className="sc-btn sc-btn-play" disabled={busy} onClick={handleUpdate}>
                 {S.update}
               </button>
+            ) : gameState === 'ready' ? (
+              <button className="sc-btn sc-btn-play" disabled={busy} onClick={handlePlay}>
+                {S.play}
+              </button>
             ) : (
               <button
                 className="sc-btn sc-btn-play"
-                disabled={gameState !== 'ready' || busy}
-                onClick={handlePlay}
+                disabled={busy}
+                onClick={() => void runCheck(false)}
               >
-                {S.play}
+                {gameState === 'checking' ? S.checking : S.check}
               </button>
             )}
             <button

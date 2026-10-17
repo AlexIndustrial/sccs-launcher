@@ -19,11 +19,15 @@ win:
   executableName: sccs-launcher
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
+  # Assisted installer instead of one-click: shows the folder picker step.
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
-  createDesktopShortcut: always
-  # Не запускать приложение сразу после установки: иначе оно висит в бутылке
-  # и блокирует повторную установку проверкой "is running".
+  # Don't launch the app right after install: it stays in the tray and
+  # blocks reinstall with the "is running" check.
   runAfterFinish: false
 mac:
   entitlementsInherit: build/entitlements.mac.plist
