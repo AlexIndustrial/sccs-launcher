@@ -46,7 +46,7 @@ jobs:
       - name: Build installer
         # --publish never: electron-builder must not publish on its own here
         # (no GH_TOKEN in this step, and the release step below does it).
-        run: pnpm run build && electron-builder --win --x64 --publish never
+        run: pnpm run build && pnpm exec electron-builder --win --x64 --publish never
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
