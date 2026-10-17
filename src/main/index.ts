@@ -3,6 +3,19 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { registerLauncherIpc } from './launcher/ipc'
+import { isWine, logError, logInfo, logPath } from './launcher/log'
+
+// Wine can't composite our window with the GPU stack: the page loads but the
+// window stays blank. Must happen before the app is ready.
+const wine = isWine()
+if (wine) {
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('disable-gpu')
+  app.commandLine.appendSwitch('disable-gpu-compositing')
+  app.commandLine.appendSwitch('disable-software-rasterizer')
+  // In-process GPU renders through Wine's GDI instead of ANGLE/D3D.
+  app.commandLine.appendSwitch('in-process-gpu')
+}
 
 let mainWindow: BrowserWindow | null = null
 
@@ -26,6 +39,46 @@ function createWindow(): void {
 
   win.on('ready-to-show', () => {
     win.show()
+  })
+
+  // A packaged renderer can fail silently (blank window). Log why.
+  win.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    logError(`did-fail-load code=${code} desc=${desc} url=${url}`)
+  })
+  win.webContents.on('render-process-gone', (_e, details) => {
+    logError(`render-process-gone: ${details.reason} exitCode=${details.exitCode}`)
+  })
+  win.webContents.on('preload-error', (_e, preloadPath, err) => {
+    logError(`preload-error ${preloadPath}: ${err.message}`)
+  })
+  win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    if (level >= 2) logError(`console: ${message} (${sourceId}:${line})`)
+  })
+  win.webContents.on('did-finish-load', () => {
+    // A blank window usually means the preload didn't expose window.api.
+    win.webContents
+      .executeJavaScript('typeof window.api')
+      .then((t) => {
+        logInfo(`renderer loaded, window.api=${String(t)}`)
+        if (wine) {
+          logInfo('gpu: disabled by wine workaround')
+          // Compositing CSS effects break the blank window on Wine.
+          win.webContents
+            .executeJavaScript("document.documentElement.classList.add('sc-no-compositing')")
+            .catch(() => {})
+        }
+      })
+      .catch((e: Error) => logError(`cannot read window.api: ${e.message}`))
+    // Did React actually paint something? A blank window with a rendered
+    // DOM is a compositing problem; an empty #root is a React problem.
+    setTimeout(() => {
+      win.webContents
+        .executeJavaScript(
+          "(() => { const r = document.getElementById('root'); return r ? r.childElementCount + ':' + r.textContent.length : 'no-root'; })()"
+        )
+        .then((t) => logInfo(`root content: ${String(t)}`))
+        .catch((e: Error) => logError(`cannot read root: ${e.message}`))
+    }, 3000)
   })
 
   win.webContents.setWindowOpenHandler((details) => {
@@ -55,6 +108,8 @@ app.whenReady().then(() => {
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
+
+  logInfo(`launcher start, version=${app.getVersion()}, wine=${wine}, log=${logPath()}`)
 
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))

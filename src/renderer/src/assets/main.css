@@ -486,3 +486,23 @@ input[type='range'].sc-range::-moz-range-thumb {
 .sc-sign a:hover {
   color: #fff;
 }
+
+/* Wine/software rendering: compositing effects (backdrop-filter, drop-shadow)
+   can leave the whole window blank, so the main process adds this class. */
+.sc-no-compositing .sc-lang,
+.sc-no-compositing .sc-pill {
+  backdrop-filter: none;
+  background: rgba(21, 29, 38, 0.98);
+}
+
+.sc-no-compositing .sc-pill {
+  background: rgba(8, 20, 14, 0.95);
+}
+
+.sc-no-compositing .sc-logo {
+  filter: none;
+}
+
+.sc-no-compositing .sc-progress-fill {
+  box-shadow: none;
+}

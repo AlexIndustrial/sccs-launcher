@@ -298,6 +298,24 @@ function App(): React.JSX.Element {
     }
   }
 
+  // Surface fatal renderer problems instead of showing a blank window.
+  useEffect(() => {
+    // warn (not log): main only persists warnings/errors to launcher.log
+    console.warn(`[boot] api=${typeof window.api} lang=${loadLang()}`)
+    const onErr = (e: ErrorEvent): void => {
+      console.error(`[fatal] ${e.message} @ ${e.filename}:${e.lineno}`)
+    }
+    const onRejection = (e: PromiseRejectionEvent): void => {
+      console.error(`[unhandled] ${String(e.reason)}`)
+    }
+    window.addEventListener('error', onErr)
+    window.addEventListener('unhandledrejection', onRejection)
+    return () => {
+      window.removeEventListener('error', onErr)
+      window.removeEventListener('unhandledrejection', onRejection)
+    }
+  }, [])
+
   // Check for game updates as soon as the app starts.
   useEffect(() => {
     const boot = setTimeout(() => {
